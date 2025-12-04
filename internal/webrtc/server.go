@@ -405,10 +405,21 @@ func (s *Server) CloseConnection(connID string) error {
 		remaining := fwd.RemoveSubscriber()
 		log.Printf("WebRTC 连接已关闭: %s (剩余订阅者: %d)", connID, remaining)
 
-		// 如果没有订阅者了，可以选择停止转发器（这里暂时保持运行）
-		// if remaining <= 0 {
-		// 	fwd.Stop()
-		// }
+		// 如果没有订阅者了，停止转发器以释放 FFmpeg 资源
+		if remaining <= 0 {
+			log.Printf("没有剩余订阅者，停止 RTP 转发器: %s", conn.CameraID)
+			fwd.Stop()
+
+			// 从 forwarders map 中删除
+			s.mutex.Lock()
+			delete(s.forwarders, conn.CameraID)
+			// 取消帧订阅
+			if cancelFn, ok := s.frameFeeds[conn.CameraID]; ok {
+				cancelFn()
+				delete(s.frameFeeds, conn.CameraID)
+			}
+			s.mutex.Unlock()
+		}
 	}
 
 	return nil

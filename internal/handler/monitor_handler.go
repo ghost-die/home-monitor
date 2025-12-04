@@ -121,6 +121,44 @@ func (h *MonitorHandler) GetDiskUsage(c *gin.Context) {
 	})
 }
 
+// SubprocessInfo 子进程信息（前端格式）
+type SubprocessInfo struct {
+	PID        int     `json:"pid"`
+	Name       string  `json:"name"`
+	Command    string  `json:"command"`
+	CPUPercent float64 `json:"cpu_percent"`
+	MemMB      float64 `json:"mem_mb"`
+	State      string  `json:"state"`
+	RunTime    string  `json:"run_time"`
+}
+
+// GetSubprocesses 获取子进程列表（FFmpeg等）
+func (h *MonitorHandler) GetSubprocesses(c *gin.Context) {
+	sysInfo := h.monitor.GetSystemInfo()
+
+	var subprocesses []SubprocessInfo
+	var totalMem uint64
+
+	for _, proc := range sysInfo.ChildProcesses {
+		subprocesses = append(subprocesses, SubprocessInfo{
+			PID:        proc.PID,
+			Name:       proc.Name,
+			Command:    proc.Command,
+			CPUPercent: proc.CPUPercent,
+			MemMB:      float64(proc.MemoryRSS) / 1024 / 1024,
+			State:      proc.State,
+			RunTime:    proc.RunTime,
+		})
+		totalMem += proc.MemoryRSS
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":   true,
+		"data":      subprocesses,
+		"total_mem": totalMem,
+	})
+}
+
 // RegisterRoutes 注册监控路由
 func (h *MonitorHandler) RegisterRoutes(group *gin.RouterGroup) {
 	monitorGroup := group.Group("/monitor")
@@ -131,6 +169,7 @@ func (h *MonitorHandler) RegisterRoutes(group *gin.RouterGroup) {
 		monitorGroup.POST("/gc", h.ForceGC)
 		monitorGroup.GET("/system", h.GetSystemInfo)
 		monitorGroup.GET("/processes", h.GetProcessHistory)
+		monitorGroup.GET("/subprocesses", h.GetSubprocesses)
 		monitorGroup.GET("/disk", h.GetDiskUsage)
 	}
 }
